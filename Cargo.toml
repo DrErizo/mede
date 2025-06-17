@@ -1,0 +1,28 @@
+[package]
+authors = ["Erizo <erizo_dev@pm.me>"]
+name = "mede"
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/drerizo/mede"
+
+[dependencies]
+anyhow = "1.0.98"
+clap = "4.5.40"
+ffmpeg-next = "7.1.0"
+iced = "0.13.1"
+image = "0.25.6"
+rayon = "1.10.0"
+reqwest = "0.12.20"
+serde = "1.0.219"
+tempfile = "3.20.0"
+tokio = "1.45.1"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+panic = "abort"
