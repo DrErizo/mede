@@ -8,15 +8,16 @@ repository = "https://github.com/drerizo/mede"
 [dependencies]
 # anyhow = "1.0.98"
 # clap = "4.5.40"
-dioxus = { version = "0.7.0", features = ["router"]}
+dioxus = { version = "0.7.0", features = ["router","desktop"]}
+dioxus-desktop = "0.7.2"
 # image = "0.25.6"
 # rayon = "1.10.0"
 reqwest = "0.12.20"
 # serde = "1.0.219"
 # tempfile = "3.20.0"
 tokio = { version = "1.48", features = ["full"] }
-yt-dlp = "1.3.4"
-
+youtube_dl = "0.10.0"
+zip = "0.6"
 [profile.dev]
 opt-level = 0
 debug = true

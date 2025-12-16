@@ -8,6 +8,7 @@ body,html,#main {
     color: #ffffff;
     height: 100%;
     width: 100%;
+    overflow: hidden;
 }
 #addressBar{
     background-color: var(--primary);
@@ -20,7 +21,7 @@ body,html,#main {
 #downloadBtn{
     background-color: var(--primary);
     border: 1px var(--secondary) solid;
-    padding: 10px;
+    padding: 20px;
     border-radius: 10px;
     margin: 10px;
     color: white;
@@ -31,12 +32,15 @@ body,html,#main {
     cursor: pointer;
 }
 #userInterface{
+    display: flex;
     color: white;
     width: 100%;
     height: 100%;
     display: flex;
     justify-content: center;
     text-align: center;
+    gap: 10px;
+    align-items: center;
     flex-direction: column;
 }
 #userInputContainer:first-child{
