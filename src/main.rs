@@ -1,10 +1,9 @@
 mod downloader;
-
+use std::process::Command;
 use downloader::Downloader;
 use dioxus::prelude::*;
-use std::path::PathBuf;
+use serde_json;
 use dioxus_desktop::{Config, WindowBuilder, LogicalSize};
-const OUTPUT_DIR: &str = "output";
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -18,6 +17,19 @@ enum Route {
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
+fn getVideoInfo(info: &str ,url: &str) -> Option<String> {
+    let output = Command::new("yt-dlp")
+        .args([
+            "--print-json",
+            "--skip-download",
+            "--no-playlist",
+            url,
+        ])
+        .output()
+        .ok()?;
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    json[info].as_str().map(|s| s.to_string())
+}
 fn main() {
     dioxus::LaunchBuilder::new()
         .with_cfg(desktop! {
@@ -38,15 +50,13 @@ fn App() -> Element {
         Router::<Route> {}
     }
 }
-
 #[component]
 pub fn AddressBar() -> Element {
     let mut url = use_signal(|| String::new());
     let mut status = use_signal(|| "Idle".to_string());
     let mut only_sound = use_signal(|| false);
+    let mut editor_mode = use_signal(|| false);
     let mut attach_metadata = use_signal(|| false);
-
-    let downloader = Downloader::new(PathBuf::from(OUTPUT_DIR));
 
     rsx! {
         div {
@@ -59,7 +69,6 @@ pub fn AddressBar() -> Element {
                 value: "{url}",
                 oninput: move |e| url.set(e.value()),
             }
-
             div {
                 id: "togglers",
 
@@ -67,7 +76,11 @@ pub fn AddressBar() -> Element {
                     h1 { "Editor Mode:" }
                     label {
                         class: "switch",
-                        input { r#type: "checkbox" }
+                        input { 
+                            r#type: "checkbox",
+                            checked: editor_mode(),
+                            onchange: move |e| editor_mode.set(e.checked()),
+                        }
                         span { class: "slider round" }
                     }
                 }
@@ -104,52 +117,54 @@ pub fn AddressBar() -> Element {
                     let url_value = url();
                     let only_sound_val = only_sound();
 
-                    let downloader = downloader.clone();
-                    let mut status = status.clone();
-
                     if url_value.trim().is_empty() {
                         status.set("Please enter a URL".to_string());
                         return;
                     }
 
+                    let Some(path) = rfd::FileDialog::new()
+                        .set_title("Save as")
+                        .set_file_name(getVideoInfo("filename",&url_value).unwrap().replace(" ", "-"))
+                        .save_file()
+                    else {
+                        status.set("No file selected".to_string());
+                        return;
+                    };
+
+                    let dir = path.parent().unwrap().to_path_buf();
+                    let output_file = path.file_name().unwrap().to_string_lossy().to_string();
+
+                    let downloader = Downloader::new(dir);
+                    let mut status = status.clone();
+
                     spawn(async move {
                         status.set("Downloading...".to_string());
 
-                        let output_file = if only_sound_val {
-                            "audio.mp3".to_string()
-                        } else {
-                            "video.mp4".to_string()
-                        };
-
                         let result = tokio::task::spawn_blocking(move || {
-                            downloader.download(url_value, output_file)
+                            downloader.download(url_value, output_file,only_sound_val)
                         })
                         .await;
 
                         match result {
-                            Ok(Ok(path)) => {
-                                status.set(format!("Downloaded to {}", path.display()));
-                            }
-                            Ok(Err(e)) => {
-                                status.set(format!("Download failed: {}", e));
-                            }
-                            Err(e) => {
-                                status.set(format!("Worker thread panicked: {}", e));
-                            }
+                            Ok(Ok(path)) => status.set(format!("Downloaded to {}", path.display())),
+                            Ok(Err(e))   => status.set(format!("Download failed: {}", e)),
+                            Err(e)       => status.set(format!("Worker thread panicked: {}", e)),
                         }
                     });
+                    
+                    if editor_mode() {
+                        navigator().push(Route::Editor{});
+                    }
                 },
                 "Download"
             }
+ 
+ 
 
-
-            div {
-                p { "Status: {status}" }
-            }
+            div { p { "Status: {status}" } }
         }
     }
 }
-
 #[component]
 pub fn Editor() -> Element {
     rsx! { div { "editor mode coming soon" } }
