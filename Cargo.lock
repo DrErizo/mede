@@ -3136,7 +3136,6 @@ dependencies = [
  "dioxus-desktop",
  "reqwest",
  "rfd",
- "serde_json",
  "tokio",
  "ureq",
  "youtube_dl",

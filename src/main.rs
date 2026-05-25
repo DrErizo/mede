@@ -1,10 +1,9 @@
 mod downloader;
 mod editor;
 use editor::Editor;
-use std::process::Command;
+use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 use downloader::Downloader;
 use dioxus::prelude::*;
-use serde_json;
 use dioxus_desktop::{Config, WindowBuilder, LogicalSize};
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -26,18 +25,25 @@ const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const EDITOR_CSS: Asset = asset!("/assets/editor.css");
 
-fn get_video_info(info: &str ,url: &str) -> Option<String> {
-    let output = Command::new("yt-dlp")
-        .args([
-            "--print-json",
-            "--skip-download",
-            "--no-playlist",
-            url,
-        ])
-        .output()
+fn get_video_title(url: &str) -> Option<String> {
+    let output = YoutubeDl::new(url)
+        .socket_timeout("15")
+        .run()
         .ok()?;
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
-    json[info].as_str().map(|s| s.to_string())
+    let video = match output {
+        YoutubeDlOutput::SingleVideo(v) => *v,
+        YoutubeDlOutput::Playlist(p) => {
+            p.entries?
+                .into_iter()
+                .next()?
+        }
+    };
+
+    let title = video.title.unwrap_or_else(|| "untitled".to_string());
+    let id = video.id;
+    let ext = video.ext.as_deref().unwrap_or("unknown");
+
+    Some(format!("{title}-[{id}].{ext}"))
 }
 fn main() {
     dioxus::LaunchBuilder::new()
@@ -125,50 +131,57 @@ pub fn AddressBar() -> Element {
                         status.set("Please enter a URL".to_string());
                         return;
                     }
-                    let title = get_video_info("filename",&url_value).unwrap().to_string();
-                    
+                    let title = match get_video_title(&url_value) {
+                        Some(t) if !t.trim().is_empty() => t,_ => {
+                            status.set("Failed to fetch video metadata".to_string());
+                            return;
+                        }
+                    };
+
                     let Some(path) = rfd::FileDialog::new()
                         .set_title("Save as")
-                        .set_file_name(title.replace(" ", "-"))
+                        .set_file_name(&title)
                         .save_file()
                     else {
                         status.set("No file selected".to_string());
                         return;
                     };
+                    if path.to_string_lossy().to_string() != "" {
+                    
+                        let dir = path.parent().unwrap().to_path_buf();
+                        let output_file = path.file_name().unwrap().to_string_lossy().to_string();
 
-                    let dir = path.parent().unwrap().to_path_buf();
-                    let output_file = path.file_name().unwrap().to_string_lossy().to_string();
+                        let downloader = Downloader::new(dir);
+                        let mut status = status.clone();
 
-                    let downloader = Downloader::new(dir);
-                    let mut status = status.clone();
+                        spawn(async move {
+                            status.set("Downloading...".to_string());
 
-                    spawn(async move {
-                        status.set("Downloading...".to_string());
+                            let result = tokio::task::spawn_blocking(move || {
+                                downloader.download(url_value, output_file,only_sound_val)
+                            })
+                            .await;
 
-                        let result = tokio::task::spawn_blocking(move || {
-                            downloader.download(url_value, output_file,only_sound_val)
-                        })
-                        .await;
+                            match result {
+                                Ok(Ok(path)) =>{ 
 
-                        match result {
-                            Ok(Ok(path)) =>{ 
+                                    status.set(format!("Downloaded to {}", path.display()));
 
-                                status.set(format!("Downloaded to {}", path.display()));
+                                    let mut state = use_context::<Signal<AppState>>();
 
-                                let mut state = use_context::<Signal<AppState>>();
+                                    state.write().video_title.set(title);
+                                    state.write().video_path.set(path.to_string_lossy().to_string());
 
-                                state.write().video_title.set(title);
-                                state.write().video_path.set(path.to_string_lossy().to_string());
+                                    if editor_mode() {
+                                        navigator().push(Route::Editor {});
+                                    }
 
-                                if editor_mode() {
-                                    navigator().push(Route::Editor {});
-                                }
-
-                            },
-                            Ok(Err(e))   => status.set(format!("Download failed: {}", e)),
-                            Err(e)       => status.set(format!("Worker thread panicked: {}", e)),
-                        }
-                    });
+                                },
+                                Ok(Err(e))   => status.set(format!("Download failed: {}", e)),
+                                Err(e)       => status.set(format!("Worker thread panicked: {}", e)),
+                            }
+                        });
+                    }
                 },
                 "Download"
             }
