@@ -1,4 +1,6 @@
 mod downloader;
+mod editor;
+use editor::Editor;
 use std::process::Command;
 use downloader::Downloader;
 use dioxus::prelude::*;
@@ -14,10 +16,17 @@ enum Route {
     Editor {},
 }
 
+#[derive(Clone)]
+pub struct AppState {
+    pub video_title: Signal<String>,
+    pub video_path: Signal<String>,
+}
+
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
+const EDITOR_CSS: Asset = asset!("/assets/editor.css");
 
-fn getVideoInfo(info: &str ,url: &str) -> Option<String> {
+fn get_video_info(info: &str ,url: &str) -> Option<String> {
     let output = Command::new("yt-dlp")
         .args([
             "--print-json",
@@ -44,9 +53,18 @@ fn main() {
 
 #[component]
 fn App() -> Element {
+
+    let state = use_signal(|| AppState {
+        video_title: Signal::new(String::new()),
+        video_path: Signal::new(String::new()),
+    });
+
+    use_context_provider(|| state);
+
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
+        document::Link { rel: "stylesheet", href: EDITOR_CSS }
         Router::<Route> {}
     }
 }
@@ -56,7 +74,6 @@ pub fn AddressBar() -> Element {
     let mut status = use_signal(|| "Idle".to_string());
     let mut only_sound = use_signal(|| false);
     let mut editor_mode = use_signal(|| false);
-    let mut attach_metadata = use_signal(|| false);
 
     rsx! {
         div {
@@ -97,19 +114,6 @@ pub fn AddressBar() -> Element {
                         span { class: "slider round" }
                     }
                 }
-
-                div {
-                    h1 { "Attach Metadata:" }
-                    label {
-                        class: "switch",
-                        input {
-                            r#type: "checkbox",
-                            checked: attach_metadata(),
-                            onchange: move |e| attach_metadata.set(e.checked()),
-                        }
-                        span { class: "slider round" }
-                    }
-                }
             }
             button {
                 id: "downloadBtn",
@@ -121,10 +125,11 @@ pub fn AddressBar() -> Element {
                         status.set("Please enter a URL".to_string());
                         return;
                     }
-
+                    let title = get_video_info("filename",&url_value).unwrap().to_string();
+                    
                     let Some(path) = rfd::FileDialog::new()
                         .set_title("Save as")
-                        .set_file_name(getVideoInfo("filename",&url_value).unwrap().replace(" ", "-"))
+                        .set_file_name(title.replace(" ", "-"))
                         .save_file()
                     else {
                         status.set("No file selected".to_string());
@@ -146,15 +151,24 @@ pub fn AddressBar() -> Element {
                         .await;
 
                         match result {
-                            Ok(Ok(path)) => status.set(format!("Downloaded to {}", path.display())),
+                            Ok(Ok(path)) =>{ 
+
+                                status.set(format!("Downloaded to {}", path.display()));
+
+                                let mut state = use_context::<Signal<AppState>>();
+
+                                state.write().video_title.set(title);
+                                state.write().video_path.set(path.to_string_lossy().to_string());
+
+                                if editor_mode() {
+                                    navigator().push(Route::Editor {});
+                                }
+
+                            },
                             Ok(Err(e))   => status.set(format!("Download failed: {}", e)),
                             Err(e)       => status.set(format!("Worker thread panicked: {}", e)),
                         }
                     });
-                    
-                    if editor_mode() {
-                        navigator().push(Route::Editor{});
-                    }
                 },
                 "Download"
             }
@@ -164,8 +178,4 @@ pub fn AddressBar() -> Element {
             div { p { "Status: {status}" } }
         }
     }
-}
-#[component]
-pub fn Editor() -> Element {
-    rsx! { div { "editor mode coming soon" } }
 }

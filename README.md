@@ -2,6 +2,14 @@
 
 A 🔥<b>blazingly fast<b>🔥 program written in rust that allows you to quickly download and edit videos from a variety of social media platforms. Utilizing [youtube-dl](https://github.com/ytdl-org/youtube-dl) and [Dioxus](https://github.com/DioxusLabs/dioxus)
 
+## Features:
+- [x] Downloading
+- [ ] Downloading Playlists
+- [ ] Editing
+- - [ ] Cropping video
+- - [ ] Trimming video timeline
+- - [ ] Trimming audio timeline
+    
 ### Building Mede
 
 Run the following command in the root of this project to build the app:
